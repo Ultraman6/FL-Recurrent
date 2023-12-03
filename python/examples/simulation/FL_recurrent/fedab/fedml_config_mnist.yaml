@@ -4,7 +4,7 @@ common_args:
   excel_save_path: "D:\\"
 
 data_args:
-  dataset: "fashionMNIST"
+  dataset: "mnist"
   data_cache_dir: ~/fedml_data
   partition_method: "hetero"
   partition_alpha: 0.5
@@ -22,13 +22,13 @@ data_args:
 #  svhn  cnn_web
 
 model_args:
-  model: "cnn_fashionMNIST"
+  model: "cnn"
 
 train_args:
-  federated_optimizer: "BEBOCS"
+  federated_optimizer: "FedAB"
   client_id_list: "[]"
   client_num_in_total: 60
-  client_num_per_round: 10
+  client_num_per_round: 30
   comm_round: 250
   epochs: 1
   batch_size: 10

@@ -46,7 +46,7 @@ def create_dataloader(path, img_size, batch_size, stride, hyp=None, augment=Fals
 class TrainValDataLoader(dataloader.DataLoader):
     """ Dataloader that reuses workers
 
-    Uses same syntax as vanilla DataLoader
+    Uses same syntax as fedavg DataLoader
     """
 
     def __init__(self, *args, **kwargs):

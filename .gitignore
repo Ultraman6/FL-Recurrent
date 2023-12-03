@@ -232,6 +232,6 @@ android/fedmlsdk/MobileNN2/src/train/FedMLTrainer.cpp
 android/fedmlsdk/MobileNN2/src/train/FedMLTrainerSA.cpp
 
 devops/aws-account2
-/python/examples/simulation/bebocs_experiment/vanilla/cifar10/
-/python/examples/simulation/bebocs_experiment/bebocs/fed_cifar100/
-/python/examples/simulation/bebocs_experiment/bebocs/cifar10/
+/python/examples/simulation/FL_recurrent/fedavg/cifar10/
+/python/examples/simulation/FL_recurrent/bebocs/fed_cifar100/
+/python/examples/simulation/FL_recurrent/bebocs/cifar10/
