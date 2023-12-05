@@ -52,9 +52,8 @@ class FedABAPI(object):
             train_data_local_dict,
             test_data_local_dict,
             class_num,
-            Q_bound,  # 质量属性值的范畴 [qmin，qmax]
-            Q_weight,  # 质量属性权重 [w1,w2,...,wn]
-            attribute_weight,
+            # Q_bounds,  # 质量属性值的范畴 [qmin，qmax]
+            # Q_weights,  # 质量属性权重 [w1,w2,...,wn]
             total_budget
         ] = dataset
 
@@ -63,7 +62,7 @@ class FedABAPI(object):
         self.val_global = None
         self.train_data_num_in_total = train_data_num
         self.test_data_num_in_total = test_data_num
-        self.attribute_weight = attribute_weight  # 读入BS规定的客户非价格质量属性权重 w
+        self.Q_weights = [0.4,0.4,0.2]   # 读入BS规定的客户非价格质量属性权重 w
         # FedAB参数
         self.args.client_num_in_total = global_client_num_in_total  # 总客户数
         self.client_list = []  # 总客户集合 N
@@ -247,7 +246,7 @@ class FedABAPI(object):
         for idx in enumerate(self.client_indexes):
             # 客户诚实投标,计算其本轮的得分S [0,1]
             self.client_scores[idx] = sigmoid(
-                sum(i * j for i, j in zip(self.attribute_weight, self.client_list[idx].getQuality())))
+                sum(i * j for i, j in zip(self.Q_weights, self.client_list[idx].getQuality())))
 
     def getReward(self):
         for idx in enumerate(self.client_indexes):
