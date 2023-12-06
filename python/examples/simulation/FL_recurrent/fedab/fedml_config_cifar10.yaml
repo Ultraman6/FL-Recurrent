@@ -30,6 +30,7 @@ train_args:
   client_num_in_total: 60
   client_num_per_round: 30
   comm_round: 250
+#  total_budget: 1000
   epochs: 1
   batch_size: 10
   client_optimizer: sgd
@@ -53,4 +54,4 @@ tracking_args:
   wandb_key: ee0b5f53d949c84cee7decbe7a629e63fb2f8408
   wandb_entity: fedml-ai
   wandb_project: simulation
-  run_name: fedml_torch_fedavg_mnist_lr
+  run_name: fedml_torch_fedab_mnist_lr

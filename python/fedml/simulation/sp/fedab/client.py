@@ -27,18 +27,15 @@ class Client:
         # 客户非价格质量属性
         self.tau_t = None  # 训练时延 average downlink transmitting time in sec
         self.tau = None     # 总时延 update time in sec
-        self.tanTime = None  # 本次本地训练时间
-        self.comTime = None  # 本次通信延迟
-        self.hisRate = None  # 历史完成率
         self.coe = None # 本地训练时间与通信延迟的系数
 
         # 客户本地训练结果
         self.loss = None
         # self.accuracy = None
-        self.prob=1 # 历史完成率
+        self.hisRate=1 # 历史完成率
         # 客户投标信息
         self.total_cost = None
-        self.flag = False # 是否被选中
+        # self.flag = False # 是否被选中
     def update_local_dataset(self, client_idx, local_training_data, local_test_data, local_sample_number):
         self.client_idx = client_idx
         self.local_training_data = local_training_data
@@ -54,7 +51,7 @@ class Client:
         I_start = time.time()  # 记录本轮开始时间
         self.loss=self.model_trainer.train(self.local_training_data, self.device, self.args)
         I_end = time.time()  # 记录本轮结束时间
-        self.tanTime = I_end - I_start
+        self.tau_t = I_end - I_start
         weights = self.model_trainer.get_model_params()
         # self.accuracy=self.model_trainer.train_accuracy
         return weights
@@ -86,4 +83,4 @@ class Client:
             totalCost=random.uniform(totalCost, totalCost * 10)
             return sigmoid(totalCost)
     def getQuality(self): # 客户投标非价格质量属性 [0,1]
-        return (sigmoid(self.tanTime),sigmoid(self.comTime),self.hisRate)
+        return (sigmoid(self.tau_t),sigmoid(self.tau_d+self.tau_u),self.hisRate)

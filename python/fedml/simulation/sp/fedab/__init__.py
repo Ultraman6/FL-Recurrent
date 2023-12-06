@@ -1,1 +1,1 @@
-from .fedab_api import FedABAPI
+from .fedab_api import FedAB_API

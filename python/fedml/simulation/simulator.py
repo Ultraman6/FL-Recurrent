@@ -1,4 +1,4 @@
-
+from .sp.fedab import FedAB_API
 from ..constants import (
     FedML_FEDERATED_OPTIMIZER_BASE_FRAMEWORK,
     FedML_FEDERATED_OPTIMIZER_FEDAVG,
@@ -21,7 +21,7 @@ from ..constants import (
     FedML_FEDERATED_OPTIMIZER_TURBO_AGGREGATE,
     FedML_FEDERATED_OPTIMIZER_ASYNC_FEDAVG,
     FedML_FEDERATED_OPTIMIZER_BEBOCS,
-    FedML_FEDERATED_OPTIMIZER_FEDCS,
+    FedML_FEDERATED_OPTIMIZER_FEDCS, FedML_FEDERATED_OPTIMIZER_FedAB,
 )
 from ..core import ClientTrainer, ServerAggregator
 
@@ -59,6 +59,8 @@ class SimulatorSingleProcess:
         elif args.federated_optimizer == FedML_FEDERATED_OPTIMIZER_CLASSICAL_VFL:
             self.fl_trainer = VflFedAvgAPI(args, device, dataset, model)
         # Mine
+        elif args.federated_optimizer == FedML_FEDERATED_OPTIMIZER_FedAB:
+            self.fl_trainer = FedAB_API(args, device, dataset, model)
         elif args.federated_optimizer == FedML_FEDERATED_OPTIMIZER_BEBOCS:
             self.fl_trainer = BEBOCS_API(args, device, dataset, model)
         elif args.federated_optimizer == FedML_FEDERATED_OPTIMIZER_FEDCS:

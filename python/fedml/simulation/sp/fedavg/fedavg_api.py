@@ -50,7 +50,7 @@ class FedAvgAPI(object):
             test_data_local_dict,
             class_num,
         ] = dataset
-
+        logging.info("args.train_data_num = {}".format(train_data_num))
         self.train_global = train_data_global
         self.test_global = test_data_global
         self.val_global = None

@@ -19,7 +19,7 @@ from ..classical_vertical_fl.party_models import sigmoid
 
 global_client_num_in_total = 60
 global_client_num_per_round = 30
-
+total_budget=1000
 accuracy_list = []
 loss_list = []
 # 参数0
@@ -39,10 +39,12 @@ round_ws.append(['Round', 'Loss', 'Accuracy', 'Time', 'Selected Client Indexs', 
 interval = 5
 
 
-class FedABAPI(object):
+class FedAB_API(object):
     def __init__(self, args, device, dataset, model):
+        # logging.info("dataset = {}".format(dataset))
         self.device = device
         self.args = args
+        # logging.info("dataset.train_data_num = {}".format(dataset.train_data_num))
         [
             train_data_num,
             test_data_num,
@@ -52,17 +54,13 @@ class FedABAPI(object):
             train_data_local_dict,
             test_data_local_dict,
             class_num,
-            # Q_bounds,  # 质量属性值的范畴 [qmin，qmax]
-            # Q_weights,  # 质量属性权重 [w1,w2,...,wn]
-            total_budget
         ] = dataset
-
         self.train_global = train_data_global
         self.test_global = test_data_global
         self.val_global = None
         self.train_data_num_in_total = train_data_num
         self.test_data_num_in_total = test_data_num
-        self.Q_weights = [0.4,0.4,0.2]   # 读入BS规定的客户非价格质量属性权重 w
+        self.Q_weights = [0.4, 0.4, 0.2]  # 读入BS规定的客户非价格质量属性权重 w
         # FedAB参数
         self.args.client_num_in_total = global_client_num_in_total  # 总客户数
         self.client_list = []  # 总客户集合 N
@@ -113,7 +111,7 @@ class FedABAPI(object):
                 model_trainer,
             )
             self.client_list.append(c)
-            self.client_train_prob.append(1)  # 客户训练概成功率φ列表
+            self.client_train_prob.append(0)  # 客户训练概成功率φ列表
             # self.client_train_noises.append(1)  # 客户训练噪声系数ζ列表
             self.client_bids.append(0)  # 客户报价列表
             self.client_qualities.append(0)  # 客户质量列表
@@ -131,7 +129,7 @@ class FedABAPI(object):
         mlops.log_training_status(mlops.ClientConstants.MSG_MLOPS_CLIENT_STATUS_TRAINING)
         mlops.log_aggregation_status(mlops.ServerConstants.MSG_MLOPS_SERVER_STATUS_RUNNING)
         mlops.log_round_info(self.args.comm_round, -1)
-        for round_idx in range(self.args.comm_round):
+        for round_idx in range(1, self.args.comm_round+1):
             logging.info("################Communication round : {}".format(round_idx))
             # 本地模型暂存容器
             w_locals = []
@@ -141,21 +139,20 @@ class FedABAPI(object):
             logging.info("client_indexes = " + str(self.client_indexes))
 
             I_start = time.time()  # 记录本轮开始时间
-            for client in enumerate(self.client_indexes):
+            for idx in self.client_indexes:
                 # update dataset
-                # 判断如果idx是client_indexes中的某一client的下标，那么就更新这个client的数据集
-                client.update_local_dataset(
-                    client.client_idx,
-                    self.train_data_local_dict[client.client_idx],
-                    self.test_data_local_dict[client.client_idx],
-                    self.train_data_local_num_dict[client.client_idx],
+                self.client_list[idx].update_local_dataset(
+                    idx,
+                    self.train_data_local_dict[idx],
+                    self.test_data_local_dict[idx],
+                    self.train_data_local_num_dict[idx],
                 )
                 # train on new dataset
                 mlops.event("train", event_started=True,
-                            event_value="{}_{}".format(str(round_idx), str(client.client_idx)))
-                w_locals.append(client.train(copy.deepcopy(w_global)))
+                            event_value="{}_{}".format(str(round_idx), str(idx)))
+                w_locals.append(self.client_list[idx].train(copy.deepcopy(w_global)))
                 mlops.event("train", event_started=False,
-                            event_value="{}_{}".format(str(round_idx), str(client.client_idx)))
+                            event_value="{}_{}".format(str(round_idx), str(idx)))
             I_end = time.time()  # 记录本轮结束时间
 
             # 更细客户完成概率
@@ -219,10 +216,10 @@ class FedABAPI(object):
             # 比较变量和真实耗时，如果小于等于真实耗时，那么完成，否则不完成
             prob = 1 if x <= ped else 0
             # 更新客户历史完成率
-            if client.client_idx in self.client_indexes: client.prob = (client.prob * self.client_selected_times[
+            if client.client_idx in self.client_indexes: client.hisRate = (client.hisRate * self.client_selected_times[
                 idx] + prob) / self.client_selected_times[idx] + 1
-            # 更新客户完成概率
-            self.client_train_prob[idx] = (self.client_train_prob[idx] * (T - 1) + prob) / T
+            # 更新客户完成概率（没弄明白，如果有一轮的估计值满足条件，那么就判定其今后的一定可以满足条件）
+            if self.client_train_prob[idx] == 1 or prob == 1: self.client_train_prob[idx] = 1
 
     def _client_sampling(self, round_idx):  # 基于UCB指标的客户选择,选择UCB指标前K大的客户
         client_num_in_total = self.args.client_num_in_total
@@ -237,7 +234,7 @@ class FedABAPI(object):
             for idx, client in enumerate(self.client_list):
                 # 客户诚实投标,计算其本轮的得分S
                 self.client_UCB[idx] = (
-                        self.client_scores[idx] * self.client_rewards[idx] / self.client_list[idx].getBid(1)[0])
+                        self.client_scores[idx] * self.client_rewards[idx] / self.client_list[idx].getBid(1))
             sorted_idx = np.argsort(self.client_UCB)  # 按分数排序的客户端下标
             self.client_indexes = sorted_idx[-1 * num_clients:]  # 选出UCB分数最高的K个客户端
         logging.info("当前轮的UCB取胜客户 = %s" % str(self.client_indexes))
