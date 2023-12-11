@@ -89,7 +89,10 @@ def _data_transforms_cifar10():
 
     train_transform.transforms.append(Cutout(16))
 
-    valid_transform = transforms.Compose([transforms.Normalize(CIFAR_MEAN, CIFAR_STD)])
+    valid_transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(CIFAR_MEAN, CIFAR_STD)
+    ])
 
     return train_transform, valid_transform
 

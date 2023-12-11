@@ -1,5 +1,6 @@
 import copy
 import logging
+import math
 import random
 from collections import OrderedDict
 from math import log
@@ -78,8 +79,7 @@ class FedAB_API(object):
         self.client_UCBRewards = []  # 结合未来预测的客户UCB奖励
         self.client_UCB = []  # 客户UCB指标
         self.client_Payment = []  # 客户支付列表(全轮次)
-        # 客户总被选中次数
-        self.client_selected_times = [0 for i in range(self.global_client_num_in_total)]  # 统计客户被选择次数 β
+        self.client_selected_times = []  # 统计客户被选择次数 β
         self.total_reward = 0  # 总奖励
         self.total_budget = total_budget  # 总预算
         # 客户训练数据参数
@@ -121,6 +121,7 @@ class FedAB_API(object):
             self.client_UCBRewards.append(0)  # 结合未来预测的客户UCB奖励
             self.client_UCB.append(0)  # 客户UCB指标
             self.client_Payment.append(0)  # 客户支付列表(全轮次)
+            self.client_selected_times.append(0)
         logging.info("############setup_clients (END)#############")
 
     def train(self):
@@ -137,7 +138,7 @@ class FedAB_API(object):
             # 客户端选择
             self._client_sampling(round_idx)
             logging.info("client_indexes = " + str(self.client_indexes))
-
+            self.upgradedSel()  # 更新客户被选中次数
             I_start = time.time()  # 记录本轮开始时间
             for idx in self.client_indexes:
                 # update dataset
@@ -150,16 +151,16 @@ class FedAB_API(object):
                 # train on new dataset
                 mlops.event("train", event_started=True,
                             event_value="{}_{}".format(str(round_idx), str(idx)))
-                w_locals.append(self.client_list[idx].train(copy.deepcopy(w_global)))
+                w_locals.append((self.client_list[idx].get_sample_number(), self.client_list[idx].train(copy.deepcopy(w_global))))
                 mlops.event("train", event_started=False,
                             event_value="{}_{}".format(str(round_idx), str(idx)))
             I_end = time.time()  # 记录本轮结束时间
 
             # 更细客户完成概率
             self.Completion_Probability(I_start, I_end, round_idx)
-            # 根据概率判断是否应该采用该模型
-            for i in self.client_indexes:
-                if self.client_train_prob[i] == 0: w_locals.remove(i)
+            # # 根据概率判断是否应该采用该模型
+            # for i in self.client_indexes:
+            #     if self.client_train_prob[i] == 0: w_locals.remove(i)
 
             self.CBP(round_idx)  # 计算客户支付
 
@@ -173,7 +174,7 @@ class FedAB_API(object):
             train_acc, train_loss, test_acc, test_loss = 0, 0, 0, 0
             if round_idx == self.args.comm_round - 1:
                 train_acc, train_loss, test_acc, test_loss = self._local_test_on_all_clients(round_idx)
-            # per {frequency_of_the_test} round
+            # 每frequency_of_the_tes全局测试一次
             elif round_idx % self.args.frequency_of_the_test == 0:
                 if self.args.dataset.startswith("stackoverflow"):
                     self._local_test_on_validation_set(round_idx)
@@ -198,28 +199,33 @@ class FedAB_API(object):
 
             self.getReward()  # 更新客户奖励
             self.upgradeUCBParm(round_idx)  # 更新客户UCB参数
+            print(self.client_Payment)
             tolPayment = sum(self.client_Payment)
             self.total_budget -= tolPayment  # 更新总预算
             self.upgradedTolReward()  # 更新总奖励
-            self.upgradedSel()  # 更新客户被选中次数
+
             if self.total_budget <= tolPayment:
                 # 输出运行时数据：每轮的选择客户、每个客户每轮的支付、剩余预算、每轮每个客户的奖励
                 break
-
+            # logging.info("本轮的客户完成率：{}".format(self.client_train_prob))
+            logging.info("本轮的客户得分：{}".format(self.client_scores))
+            logging.info("本轮的客户奖励：{}".format(self.client_rewards))
+            logging.info("本轮的客户支付：{}".format(self.client_Payment))
         mlops.log_training_finished_status()
         mlops.log_aggregation_finished_status()
 
-    def Completion_Probability(self, Is, Ie, T):  # 计算本轮的完成概率并加入到概率期望中
+    def Completion_Probability(self, Is, Ie, T):  # 计算本轮的完成概率并加入到概率期望中(有问题)
         ped = Ie - Is  # 计算全局轮的耗时
         for idx, client in enumerate(self.client_list):  # 计算本轮选中客户的完成概率
             x = np.random.normal(Is + ped / 2, 1)  # 根据dI生成耗时随机变量
             # 比较变量和真实耗时，如果小于等于真实耗时，那么完成，否则不完成
             prob = 1 if x <= ped else 0
             # 更新客户历史完成率
-            if client.client_idx in self.client_indexes: client.hisRate = (client.hisRate * self.client_selected_times[
-                idx] + prob) / self.client_selected_times[idx] + 1
+            if client.client_idx in self.client_indexes: client.hisRate = (client.hisRate * (self.client_selected_times[
+                idx]- 1)+ prob) /(self.client_selected_times[idx])
             # 更新客户完成概率（没弄明白，如果有一轮的估计值满足条件，那么就判定其今后的一定可以满足条件）
-            if self.client_train_prob[idx] == 1 or prob == 1: self.client_train_prob[idx] = 1
+            # if self.client_train_prob[idx] == 1 or prob == 1: self.client_train_prob[idx] = 1
+            self.client_train_prob[idx] = 1
 
     def _client_sampling(self, round_idx):  # 基于UCB指标的客户选择,选择UCB指标前K大的客户
         client_num_in_total = self.args.client_num_in_total
@@ -240,27 +246,29 @@ class FedAB_API(object):
         logging.info("当前轮的UCB取胜客户 = %s" % str(self.client_indexes))
 
     def getScore(self):
-        for idx in enumerate(self.client_indexes):
+        for idx in self.client_indexes:
             # 客户诚实投标,计算其本轮的得分S [0,1]
             self.client_scores[idx] = sigmoid(
                 sum(i * j for i, j in zip(self.Q_weights, self.client_list[idx].getQuality())))
 
     def getReward(self):
-        for idx in enumerate(self.client_indexes):
+        for idx in self.client_indexes:
             # 计算客户的本轮的奖励r（这里没弄明白系数，先激活归一化）
-            self.client_rewards[idx] = sigmoid(self.client_train_prob[idx] * self.client_list[idx].coe * np.sqrt(
-                self.client_list[idx].local_sample_number) * pow(self.client_list[idx].loss, 2))
+            # print(self.client_train_prob[idx])
+            self.client_rewards[idx] = sigmoid(self.client_train_prob[idx] * math.sqrt(
+                self.client_list[idx].get_sample_number() * pow(self.client_list[idx].loss, 2)))
+            print(self.client_rewards[idx])
 
     # 每轮更新客户UCB参数
     def upgradeUCBParm(self, round_idx):
-        for idx in enumerate(self.client_list):
+        for client in self.client_list:
             # 更新客户的平均奖励
-            if (self.client_rewards[idx] != 0):
-                self.client_avgRewards[idx] = (self.client_avgRewards[idx] * self.client_selected_times[idx] +
-                                               self.client_rewards[idx]) / (self.client_selected_times[idx] + 1)
+            if (self.client_rewards[client.client_idx] != 0):
+                self.client_avgRewards[client.client_idx] = (self.client_avgRewards[client.client_idx] * (self.client_selected_times[client.client_idx]-1) +
+                                               self.client_rewards[client.client_idx]) / (self.client_selected_times[client.client_idx])
             # 更新客户的UCB奖励
-            self.client_UCBRewards[idx] = (self.client_avgRewards[idx] * np.sqrt(
-                (self.args.client_num_per_round + 1) * log(round_idx, 2)) / self.client_selected_times[idx])
+            self.client_UCBRewards[client.client_idx] = self.client_avgRewards[client.client_idx] + np.sqrt(
+                (self.args.client_num_per_round + 1) * log(round_idx, 2)) / self.client_selected_times[client.client_idx]
 
     # 每轮计算客户的UCB指标
     def getUCB(self):
@@ -268,20 +276,19 @@ class FedAB_API(object):
         for idx, client in enumerate(self.client_list):
             # 根据本轮的UCB奖励、投标、得分计算UCB指标
             self.client_UCB[idx] = (
-                    self.client_scores[idx] * self.client_UCBRewards[idx] / self.client_list[idx].getBid(1)[0])
+                    self.client_scores[idx] * self.client_UCBRewards[idx] / self.client_list[idx].getBid(1))
 
     def CBP(self, round_idx):  # 基于关键投标的支付计算
         if round_idx != 1:  # 第一轮随机选择
             k = self.client_indexes[self.args.client_num_per_round - 1]  # 获取UCB指标最小的客户的下标
-            for idx in enumerate(self.client_indexes):  # 计算所有选中客户的支付
+            for idx in self.client_indexes:  # 计算所有选中客户的支付
                 if self.client_train_prob[idx] == 0:  # 如果客户未完成训练，支付为0
                     self.client_Payment[idx] = 0
                 else:
-                    self.client_Payment[idx] = ((
-                        self.client_UCBRewards[idx] * max(self.client_scores) * self.client_list[k].getBid(1) /
-                        self.client_UCBRewards[k] * self.client_scores[k], self.args.Cmax))
+                    self.client_Payment[idx] = min(self.client_UCBRewards[idx] * max(self.client_scores) * self.client_list[k].getBid(1) /
+                        self.client_UCBRewards[k] * self.client_scores[k], self.args.Cmax)
         else:  # 第一轮选中全部客户
-            for idx in enumerate(self.client_indexes):  # 支付固定为Cmax
+            for idx in self.client_indexes:  # 支付固定为Cmax
                 if self.client_train_prob[idx] == 0:
                     self.client_Payment[idx] = 0
                 else:
@@ -289,9 +296,9 @@ class FedAB_API(object):
 
     def upgradedTolReward(self):  # 更新总奖励
         sum = 0
-        for idx, r in self.client_rewards:
+        for idx, r in enumerate(self.client_rewards):
             sum += r
-            self.total_reward[idx] = 0
+            self.client_rewards[idx] = 0
         self.total_reward = self.total_reward + sum
 
     def upgradedSel(self):  # 更新客户被选中次数
@@ -539,7 +546,7 @@ def plot_accuracy_and_loss(self, round_idx):
     plt.title("num of selected")
     plt.xlabel("num of epoch")
     plt.ylabel("value of num of selected")
-    plt.bar(range(1, len(client_selected_times) + 1), client_selected_times, width=0.5, fc='b')
+    plt.bar(range(1, len(self.client_selected_times) + 1), self.client_selected_times, width=0.5, fc='b')
 
     plt.tight_layout()
     plt.pause(0.005)

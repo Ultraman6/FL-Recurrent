@@ -180,6 +180,7 @@ class FedAvgAPI(object):
             return 1  # 成功返回模型
         else:
             return 0
+    # 随机选取客户（random）
     def _client_sampling(self, round_idx, client_num_in_total, client_num_per_round):
         if client_num_in_total == client_num_per_round:
             client_indexes = [client_index for client_index in range(client_num_in_total)]
