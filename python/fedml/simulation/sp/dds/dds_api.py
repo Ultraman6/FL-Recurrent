@@ -36,7 +36,10 @@ round_ws.append(['Round', 'Loss', 'Accuracy', 'Time', 'Selected Client Indexs', 
 # 设置时间间隔（以秒为单位）
 interval = 5
 
-class FedAvgAPI(object):
+np.random.seed(0)  # make sure for each comparison, we are selecting the same clients each round
+fixed_client_indexes = np.random.choice(range(global_client_num_in_total), global_client_num_per_round, replace=False)
+
+class Dds_API(object):
     def __init__(self, args, device, dataset, model):
         self.device = device
         self.args = args
@@ -60,7 +63,8 @@ class FedAvgAPI(object):
         self.args.client_num_in_total = global_client_num_in_total #added
         self.args.client_num_per_round = global_client_num_per_round #added
         self.client_list = []
-        self.client_train_prob = [] # 客户训练概成功率列表
+        # self.client_train_prob = [] # 客户训练概成功率列表
+        self.client_SV_List = [] # 客户SV列表
         # 客户训练数据参数
         self.train_data_local_num_dict = train_data_local_num_dict
         self.train_data_local_dict = train_data_local_dict
@@ -90,7 +94,7 @@ class FedAvgAPI(object):
                 model_trainer,
             )
             self.client_list.append(c)
-            self.client_train_prob.append(0.5) # 设置客户训练概成功率列表
+            # self.client_train_prob.append(0.5) # 设置客户训练概成功率列表
         logging.info("############setup_clients (END)#############")
 
     def train(self):
@@ -109,9 +113,14 @@ class FedAvgAPI(object):
             for scalability: following the original FedAvg algorithm, we uniformly sample a fraction of clients in each round.
             Instead of changing the 'Client' instances, our implementation keeps the 'Client' instances and then updates their local dataset 
             """
-            client_indexes = self._client_sampling(
-                round_idx, self.args.client_num_in_total, self.args.client_num_per_round
-            )
+
+            if round_idx != 0:  # 非init轮，提前赋予全局初始模型
+                if self.args.algo == "dds": client_indexes = self.dds(self.args.client_num_in_total, self.args.client_num_per_round, w_global)
+                elif self.args.algo == "randfl": client_indexes = self.randfl(round_idx, self.args.client_num_in_total, self.args.client_num_per_round)
+                elif self.args.algo == "fixedfl": client_indexes = self.fixedfl(self.args.client_num_in_total, self.args.client_num_per_round)
+                else: print("没有这个算法！")
+            else:
+                client_indexes=[client.client_idx for client in self.client_list]
             logging.info("client_indexes = " + str(client_indexes))
 
             for idx, client in enumerate(self.client_list):
@@ -127,12 +136,13 @@ class FedAvgAPI(object):
                     # train on new dataset
                     mlops.event("train", event_started=True,
                                 event_value="{}_{}".format(str(round_idx), str(client.client_idx)))
-                    w = client.train(copy.deepcopy(w_global))
+                    if round_idx == 0: # init阶段，先给预训练模型
+                        self.client_list[idx].setModel(w_global)
+                    w = client.train()
                     mlops.event("train", event_started=False,
                                 event_value="{}_{}".format(str(round_idx), str(client.client_idx)))
-                    if self.judge_model(self.client_train_prob[client.client_idx]) == 1: # 判断是否成功返回模型
-                        w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
-                        logging.info("client: " + str(client.client_idx)+" successfully return model")
+                    w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
+                    logging.info("client: " + str(client.client_idx)+" successfully return model")
 
             # 借助client_selected_times统计global_client_num_in_total个客户每个人的被选择次数
             for i in client_indexes:
@@ -145,6 +155,10 @@ class FedAvgAPI(object):
 
             self.model_trainer.set_model_params(w_global)
             mlops.event("agg", event_started=False, event_value=str(round_idx))
+            if round_idx == 0:
+                for idx in client_indexes:
+                    self.client_list[idx].setModel(w_global)
+                    self.client_list[idx].getSV(True)
 
             # test results
             # at last round
@@ -168,27 +182,54 @@ class FedAvgAPI(object):
                                 str(client_selected_times)])
 
             # 保存Excel文件到self.args.excel_save_path+文件名
-            wb.save(self.args.excel_save_path + self.args.model + "_[" + self.args.dataset +"]_fedavg_training_results_NIID"+ str(self.args.experiment_niid_level) +".xlsx")
+            wb.save(self.args.excel_save_path + self.args.model + "_[" + self.args.dataset +"]_dds_training_results_NIID"+ str(self.args.experiment_niid_level) +".xlsx")
             # 休眠一段时间，以便下一个循环开始前有一些时间
             time.sleep(interval)
 
         mlops.log_training_finished_status()
         mlops.log_aggregation_finished_status()
-    def judge_model(self,prob): # 基于随机数结合概率判断是否成功返回模型
-        random_number = random.random()  # 生成0到1之间的随机数
-        if random_number < prob:
-            return 1  # 成功返回模型
-        else:
-            return 0
+    # def judge_model(self,prob): # 基于随机数结合概率判断是否成功返回模型
+    #     random_number = random.random()  # 生成0到1之间的随机数
+    #     if random_number < prob:
+    #         return 1  # 成功返回模型
+    #     else:
+    #         return 0
+
     # 随机选取客户（random）
-    def _client_sampling(self, round_idx, client_num_in_total, client_num_per_round):
+    def randfl(self, round_idx, client_num_in_total, client_num_per_round):
         if client_num_in_total == client_num_per_round:
             client_indexes = [client_index for client_index in range(client_num_in_total)]
         else:
             num_clients = min(client_num_per_round, client_num_in_total)
             # np.random.seed(round_idx)  # make sure for each comparison, we are selecting the same clients each round
+            # client_indexes = random.choice(range(client_num_in_total), num_clients, replace=False)
             client_indexes = np.random.choice(range(client_num_in_total), num_clients, replace=False)
         return client_indexes
+
+    # 固定选取客户（random）
+    def fixedfl(self, client_num_in_total, client_num_per_round):
+        if client_num_in_total == client_num_per_round:
+            client_indexes = [client_index for client_index in range(client_num_in_total)]
+        else:
+            client_indexes = fixed_client_indexes
+        return client_indexes
+
+    # 基于SV选取客户（random）
+    def dds(self, client_num_in_total, client_num_per_round, w_global):
+        if client_num_in_total == client_num_per_round:
+            client_indexes = [client_index for client_index in range(client_num_in_total)]
+        else:
+            client_SV=[]
+            for idx, client in enumerate(self.client_list):
+                client.setModel(w_global)
+                client_SV.append(client.getSV(False))
+            sorted_idx = np.argsort(client_SV) # 按分数排序的客户端下标
+            client_indexes = sorted_idx[client_num_per_round:] # 选出分数最低的num_clients个客户端
+        return client_indexes
+
+    def setInitModel(self, w_global): # 投标开始前，设置本轮初始模型
+        for idx, client in enumerate(self.client_list):
+            client.setModel(w_global)
 
     def _generate_validation_set(self, num_samples=10000):
         test_data_num = len(self.test_global.dataset)
@@ -400,6 +441,10 @@ class FedAvgAPI(object):
             raise Exception("Unknown format to log metrics for dataset {}!" % self.args.dataset)
 
         logging.info(stats)
+
+    def setInitMode(self, w_global):
+        pass
+
 
 # 定义绘制精度图的函数
 def plot_accuracy_and_loss(self, round_idx):

@@ -31,6 +31,19 @@
 - [ ] Test accuracy and loss of all datasets.
 - [ ] Individual rationality on client id and
 
+### DDS [原文](https://ieeexplore.ieee.org/abstract/document/10092911)
+#### 算法实现 
+- [ ] [DDS](python/fedml/simulation/sp/fedab)
+- 变量关系：
+- [ ] 实验对比算法 [RandFL](python/fedml/simulation/sp/fedavg)、[FixFL](python/fedml/simulation/sp/fedavg)
+#### 配置实现
+- [x] 模型 [MLP](python/fedml/model/cnn.py)
+- [x] 数据集 [MNIST](python/fedml/data/mnist.py) [FMNIST](python/fedml/data/fmnist.py) [CIFAR10](python/fedml/data/cifar10.py)
+#### 实验结果复现
+- [ ] Total reward performance under different clients K in each round. (a) K = 10. (b) K = 15. (c) K = 20.
+- [ ] Best test accuracy under different budget G and clients K.(a)G = 300. (b) G = 400. (c) G = 500.
+- [ ] Test accuracy and loss of all datasets.
+- [ ] Individual rationality on client id and
 
 
 

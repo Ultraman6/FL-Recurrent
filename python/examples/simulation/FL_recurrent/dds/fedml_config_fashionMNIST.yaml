@@ -4,9 +4,9 @@ common_args:
   excel_save_path: "D:\\"
 
 data_args:
-  dataset: "mnist"
+  dataset: "fashionMNIST"
   data_cache_dir: ~/fedml_data
-  partition_method: "home"
+  partition_method: "hetero"
   partition_alpha: 0.5
   experiment_niid_level: 0.5
   #experiment_niid_level = 1 means that the data is niid
@@ -22,7 +22,7 @@ data_args:
 #  svhn  cnn_web
 
 model_args:
-  model: "cnn"
+  model: "cnn_fashionMNIST"
 
 train_args:
   federated_optimizer: "FedAvg"

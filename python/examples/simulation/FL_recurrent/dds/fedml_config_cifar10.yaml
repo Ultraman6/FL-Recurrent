@@ -4,11 +4,12 @@ common_args:
   excel_save_path: "D:\\"
 
 data_args:
-  dataset: "mnist"
+  dataset: "cifar10"
   data_cache_dir: ~/fedml_data
-  partition_method: "home"
-  partition_alpha: 0.5
-  experiment_niid_level: 0.5
+  partition_method: "homo"
+  partition_alpha: 0.1
+  #partition_alpha 表示客户端数据量不同程度
+  experiment_niid_level: 0
   #experiment_niid_level = 1 means that the data is niid
   #experiment_niid_level = 0 means that the data is iid
   #experiment_niid_level = (0,1) e.g. 0.7 means that the data is partially niid
@@ -22,13 +23,13 @@ data_args:
 #  svhn  cnn_web
 
 model_args:
-  model: "cnn"
+  model: "cnn_web"
 
 train_args:
-  federated_optimizer: "FedAvg"
+  federated_optimizer: "Dds"
   client_id_list: "[]"
-  client_num_in_total: 60
-  client_num_per_round: 30
+  client_num_in_total: 100
+  client_num_per_round: 10
   comm_round: 250
   epochs: 1
   batch_size: 10
@@ -40,7 +41,7 @@ validation_args:
   frequency_of_the_test: 5
 
 device_args:
-  using_gpu: true
+  using_gpu: false
   gpu_id: 0
 
 comm_args:

@@ -1,3 +1,4 @@
+from .sp.dds import Dds_API
 from .sp.fedab import FedAB_API
 from ..constants import (
     FedML_FEDERATED_OPTIMIZER_BASE_FRAMEWORK,
@@ -21,7 +22,7 @@ from ..constants import (
     FedML_FEDERATED_OPTIMIZER_TURBO_AGGREGATE,
     FedML_FEDERATED_OPTIMIZER_ASYNC_FEDAVG,
     FedML_FEDERATED_OPTIMIZER_BEBOCS,
-    FedML_FEDERATED_OPTIMIZER_FEDCS, FedML_FEDERATED_OPTIMIZER_FedAB,
+    FedML_FEDERATED_OPTIMIZER_FEDCS, FedML_FEDERATED_OPTIMIZER_FedAB, FedML_FEDERATED_OPTIMIZER_Dds,
 )
 from ..core import ClientTrainer, ServerAggregator
 
@@ -61,6 +62,8 @@ class SimulatorSingleProcess:
         # Mine
         elif args.federated_optimizer == FedML_FEDERATED_OPTIMIZER_FedAB:
             self.fl_trainer = FedAB_API(args, device, dataset, model)
+        elif args.federated_optimizer == FedML_FEDERATED_OPTIMIZER_Dds:
+            self.fl_trainer = Dds_API(args, device, dataset, model)
         elif args.federated_optimizer == FedML_FEDERATED_OPTIMIZER_BEBOCS:
             self.fl_trainer = BEBOCS_API(args, device, dataset, model)
         elif args.federated_optimizer == FedML_FEDERATED_OPTIMIZER_FEDCS:
